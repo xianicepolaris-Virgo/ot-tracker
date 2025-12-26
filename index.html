@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>调休管家 - 专业进阶版</title>
+    <title>调休管家 - 严谨版</title>
     <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
     <script src="https://cdn.jsdelivr.net/npm/leancloud-storage@4.12.0/dist/av-min.js"></script>
     <script src="https://unpkg.com/vue@2.6.14/dist/vue.js"></script>
@@ -12,50 +12,52 @@
         body { background-color: #f5f7fa; margin: 0; padding: 10px; font-family: "Helvetica Neue",Arial,sans-serif; }
         .app-container { max-width: 600px; margin: 0 auto; }
         .header-card { 
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+            background: linear-gradient(135deg, #1890ff 0%, #36cfc9 100%); 
             color: white; border-radius: 12px; border: none; margin-bottom: 20px;
-            box-shadow: 0 4px 15px rgba(118, 75, 162, 0.3);
+            box-shadow: 0 4px 15px rgba(24, 144, 255, 0.3);
         }
         .total-display { font-size: 48px; font-weight: bold; margin: 10px 0; }
         .footer { text-align: center; color: #909399; font-size: 12px; margin-top: 20px; }
-        .el-button--circle { font-size: 18px; }
+        .type-plus { color: #67C23A; font-weight: bold; }
+        .type-minus { color: #F56C6C; font-weight: bold; }
     </style>
 </head>
 <body>
 <div id="app" class="app-container">
-    <el-card class="header-card" v-loading="loading" element-loading-background="rgba(102, 126, 234, 0.7)">
+    <el-card class="header-card" v-loading="loading">
         <div v-if="user" style="display: flex; justify-content: space-between; align-items: center;">
             <el-tag effect="dark" size="small" style="background: rgba(255,255,255,0.3); border:none;">👤 {{ user }}</el-tag>
             <el-dropdown @command="handleUserCommand">
-                <span style="color: white; cursor: pointer; font-size: 14px;">账户管理 <i class="el-icon-arrow-down"></i></span>
+                <span style="color: white; cursor: pointer; font-size: 14px;">管理 <i class="el-icon-arrow-down"></i></span>
                 <el-dropdown-menu slot="dropdown">
-                    <el-dropdown-item v-for="u in userList" :key="u" :command="u">{{ u }}</el-dropdown-item>
-                    <el-dropdown-item command="ADD_NEW" divided>+ 新成员</el-dropdown-item>
-                    <el-dropdown-item command="LOGOUT" style="color: #F56C6C;">退出当前</el-dropdown-item>
+                    <el-dropdown-item command="MANAGE_MEMBERS" icon="el-icon-user">成员管理</el-dropdown-item>
+                    <el-dropdown-item command="ADD_NEW" icon="el-icon-plus">添加新成员</el-dropdown-item>
+                    <el-dropdown-item command="LOGOUT" icon="el-icon-switch-button" style="color: #F56C6C;">退出当前</el-dropdown-item>
                 </el-dropdown-menu>
             </el-dropdown>
         </div>
         <div v-if="user" style="text-align: center; margin-top: 10px;">
-            <div style="font-size: 13px; opacity: 0.8;">当前可调休余额</div>
+            <div style="font-size: 13px; opacity: 0.9;">当前可调休余额</div>
             <div class="total-display">{{ total.toFixed(1) }} <small style="font-size: 18px">天</small></div>
         </div>
     </el-card>
 
     <div style="text-align: center; margin-bottom: 20px;">
-        <el-button type="primary" icon="el-icon-plus" round @click="openDialog('ADD')">新增记录 (加班/调休)</el-button>
+        <el-button type="primary" icon="el-icon-document-add" round @click="openDialog('ADD')">登记记录</el-button>
+        <el-button icon="el-icon-refresh" circle @click="fetchData"></el-button>
     </div>
 
     <el-table :data="logs" stripe size="small" style="width: 100%; border-radius: 10px;" v-if="user">
         <el-table-column prop="logDate" label="日期" width="105"></el-table-column>
-        <el-table-column label="天数" width="70">
+        <el-table-column label="天数" width="75">
             <template slot-scope="scope">
-                <b :style="{color: scope.row.amount > 0 ? '#67C23A' : '#F56C6C'}">
+                <span :class="scope.row.amount > 0 ? 'type-plus' : 'type-minus'">
                     {{ scope.row.amount > 0 ? '+' + scope.row.amount : scope.row.amount }}
-                </b>
+                </span>
             </template>
         </el-table-column>
         <el-table-column prop="note" label="备注" show-overflow-tooltip></el-table-column>
-        <el-table-column label="操作" width="100" align="right">
+        <el-table-column label="操作" width="80" align="right">
             <template slot-scope="scope">
                 <el-button type="text" icon="el-icon-edit" @click="openDialog('EDIT', scope.row)"></el-button>
                 <el-button type="text" icon="el-icon-delete" style="color: #F56C6C" @click="handleDelete(scope.row)"></el-button>
@@ -63,29 +65,48 @@
         </el-table-column>
     </el-table>
 
-    <div class="footer">数据已同步至 LeanCloud · 仅供内部学习使用</div>
+    <el-dialog title="👥 成员管理" :visible.sync="memberDialogVisible" width="95%">
+        <div v-for="u in userList" :key="u" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #f0f0f0;">
+            <span>{{ u }}</span>
+            <div>
+                <el-button size="mini" type="text" @click="renameMember(u)">改名</el-button>
+                <el-button size="mini" type="text" style="color: #F56C6C" @click="removeMember(u)">删除</el-button>
+                <el-button size="mini" type="primary" plain @click="switchUser(u)" v-if="u !== user">切换</el-button>
+            </div>
+        </div>
+    </el-dialog>
 
-    <el-dialog :title="isEdit ? '编辑记录' : '新增加班/调休'" :visible.sync="dialogVisible" width="90%" center>
+    <el-dialog :title="isEdit ? '编辑记录' : '新增登记'" :visible.sync="dialogVisible" width="90%" center>
         <el-form label-position="top">
+            <el-form-item label="记录类型">
+                <el-radio-group v-model="form.type" size="medium" style="width: 100%; display: flex;">
+                    <el-radio-button label="plus" style="flex:1">加班 (+)</el-radio-button>
+                    <el-radio-button label="minus" style="flex:1">调休 (-)</el-radio-button>
+                </el-radio-group>
+            </el-form-item>
             <el-form-item label="日期">
-                <el-date-picker v-model="form.logDate" type="date" placeholder="选择日期" style="width: 100%" value-format="yyyy-MM-dd"></el-date-picker>
+                <el-date-picker v-model="form.logDate" type="date" style="width: 100%" value-format="yyyy-MM-dd"></el-date-picker>
             </el-form-item>
-            <el-form-item label="天数变动 (加班填正数，调休填负数)">
-                <el-input-number v-model="form.amount" :precision="1" :step="0.5" style="width: 100%"></el-input-number>
+            <el-form-item label="天数">
+                <el-input-number v-model="form.displayAmount" :precision="1" :step="0.5" :min="0.1" style="width: 100%"></el-input-number>
+                <div v-if="form.type === 'minus'" style="font-size: 12px; color: #F56C6C; margin-top: 5px;">
+                    * 预计扣减后余额：{{ (total - (isEdit ? Math.abs(oldAmount) : 0) - form.displayAmount).toFixed(1) }} 天
+                </div>
             </el-form-item>
-            <el-form-item label="备注说明">
-                <el-input v-model="form.note" placeholder="如：XX项目加班 / 周五调休"></el-input>
+            <el-form-item label="备注">
+                <el-input v-model="form.note" placeholder="备注信息"></el-input>
             </el-form-item>
         </el-form>
         <div slot="footer">
             <el-button @click="dialogVisible = false">取消</el-button>
-            <el-button type="primary" @click="submitForm" :loading="loading">保存到云端</el-button>
+            <el-button type="primary" @click="submitForm" :loading="loading">确认保存</el-button>
         </div>
     </el-dialog>
+
+    <div class="footer">严谨版调休系统 · 自动防止余额负数</div>
 </div>
 
 <script>
-// --- 配置信息 (已填入你的 AppID 和 Key) ---
 AV.init({
   appId: "Mz4sDbBvDWL73JIex95G2Oyk-gzGzoHsz",
   appKey: "drSmabDFOB0U5L0p49KVBqWP",
@@ -102,21 +123,33 @@ new Vue({
         total: 0,
         logs: [],
         dialogVisible: false,
+        memberDialogVisible: false,
         isEdit: false,
-        form: { id: '', logDate: '', amount: 1, note: '' }
+        oldAmount: 0, // 记录修改前的值，用于精准校验
+        form: { id: '', type: 'plus', logDate: '', displayAmount: 1, note: '' }
     },
     mounted() {
         if (!this.user) this.forceLogin();
         else this.fetchData();
     },
     methods: {
-        // 强制姓名输入
+        async fetchData() {
+            if (!this.user) return;
+            this.loading = true;
+            try {
+                const query = new AV.Query('OTLog');
+                query.equalTo('user', this.user);
+                query.descending('logDate');
+                const res = await query.find();
+                this.logs = res.map(r => ({ id: r.id, logDate: r.get('logDate'), amount: r.get('amount'), note: r.get('note') }));
+                this.total = this.logs.reduce((sum, r) => sum + r.amount, 0);
+            } finally { this.loading = false; }
+        },
         forceLogin() {
-            this.$prompt('请输入姓名开始记录', '初始化', {
-                confirmButtonText: '确定', showCancelButton: false, inputPattern: /\S+/, inputErrorMessage: '姓名不能为空'
-            }).then(({ value }) => {
-                this.user = value;
+            this.$prompt('请输入姓名', '初始化', { confirmButtonText: '确定', showCancelButton: !!this.user })
+            .then(({ value }) => {
                 if (!this.userList.includes(value)) this.userList.push(value);
+                this.user = value;
                 this.saveLocal();
                 this.fetchData();
             });
@@ -125,72 +158,106 @@ new Vue({
             localStorage.setItem('ot_user', this.user);
             localStorage.setItem('ot_user_list', JSON.stringify(this.userList));
         },
-        // 抓取数据
-        async fetchData() {
-            if (!this.user) return;
-            this.loading = true;
-            try {
-                const query = new AV.Query('OTLog');
-                query.equalTo('user', this.user);
-                query.descending('logDate'); // 按用户填写的日期排序
-                const results = await query.find();
-                this.logs = results.map(r => ({
-                    id: r.id,
-                    logDate: r.get('logDate'),
-                    amount: r.get('amount'),
-                    note: r.get('note')
-                }));
-                this.total = this.logs.reduce((sum, r) => sum + r.amount, 0);
-            } finally { this.loading = false; }
-        },
-        // 打开弹窗（新增或编辑）
         openDialog(mode, row = null) {
             this.isEdit = mode === 'EDIT';
             if (this.isEdit) {
-                this.form = { ...row };
+                this.oldAmount = row.amount; // 暂存旧值
+                this.form = {
+                    id: row.id,
+                    type: row.amount >= 0 ? 'plus' : 'minus',
+                    logDate: row.logDate,
+                    displayAmount: Math.abs(row.amount),
+                    note: row.note
+                };
             } else {
-                this.form = { id: '', logDate: new Date().toISOString().split('T')[0], amount: 1, note: '' };
+                this.form = { id: '', type: 'plus', logDate: new Date().toISOString().split('T')[0], displayAmount: 1, note: '' };
             }
             this.dialogVisible = true;
         },
-        // 提交表单（保存或更新）
         async submitForm() {
-            if (!this.form.logDate) return this.$message.error('请选择日期');
+            // --- 核心校验逻辑：防止总天数变负 ---
+            const finalDelta = this.form.type === 'plus' ? this.form.displayAmount : -this.form.displayAmount;
+            
+            let projectedTotal = 0;
+            if (this.isEdit) {
+                // 修改态：当前总数 - 掉旧记录的值 + 新输入的值
+                projectedTotal = this.total - this.oldAmount + finalDelta;
+            } else {
+                // 新增态：当前总数 + 新输入的值
+                projectedTotal = this.total + finalDelta;
+            }
+
+            if (projectedTotal < 0) {
+                this.$message.error(`提交失败！剩余调休天数不足（计算结果为 ${projectedTotal} 天）`);
+                return; // 拦截，不执行后续保存
+            }
+
             this.loading = true;
             try {
-                let log;
-                if (this.isEdit) {
-                    log = AV.Object.createWithoutData('OTLog', this.form.id);
-                } else {
-                    log = new OTLog();
-                    log.set('user', this.user);
-                }
+                const log = this.isEdit ? AV.Object.createWithoutData('OTLog', this.form.id) : new OTLog();
+                if (!this.isEdit) log.set('user', this.user);
                 log.set('logDate', this.form.logDate);
-                log.set('amount', this.form.amount);
+                log.set('amount', finalDelta);
                 log.set('note', this.form.note);
                 await log.save();
-                this.$message.success(this.isEdit ? '已成功修改' : '已成功新增');
+                this.$message.success('云端同步成功');
                 this.dialogVisible = false;
                 this.fetchData();
-            } catch (e) {
-                this.$message.error('云端保存失败');
             } finally { this.loading = false; }
         },
-        // 删除记录
-        handleDelete(row) {
-            this.$confirm(`确定要删除 ${row.logDate} 的这条记录吗？`, '警告', {
-                confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning'
-            }).then(async () => {
-                const log = AV.Object.createWithoutData('OTLog', row.id);
-                await log.destroy();
-                this.$message.success('已删除');
+        async renameMember(oldName) {
+            const { value: newName } = await this.$prompt('新姓名', '重命名', { inputValue: oldName });
+            if (newName && newName !== oldName) {
+                this.loading = true;
+                const query = new AV.Query('OTLog');
+                query.equalTo('user', oldName);
+                const records = await query.find();
+                records.forEach(r => r.set('user', newName));
+                await AV.Object.saveAll(records);
+                const idx = this.userList.indexOf(oldName);
+                this.userList.splice(idx, 1, newName);
+                if (this.user === oldName) this.user = newName;
+                this.saveLocal();
                 this.fetchData();
-            });
+                this.loading = false;
+            }
+        },
+        async removeMember(target) {
+            await this.$confirm(`确定彻底删除 ${target} 及其所有记录？`, '高危操作');
+            this.loading = true;
+            const query = new AV.Query('OTLog');
+            query.equalTo('user', target);
+            const records = await query.find();
+            await AV.Object.destroyAll(records);
+            this.userList = this.userList.filter(u => u !== target);
+            if (this.user === target) {
+                this.user = this.userList[0] || '';
+                if (!this.user) { this.saveLocal(); location.reload(); return; }
+            }
+            this.saveLocal();
+            this.fetchData();
+            this.loading = false;
+        },
+        switchUser(u) {
+            this.user = u;
+            this.saveLocal();
+            this.fetchData();
+            this.memberDialogVisible = false;
+        },
+        async handleDelete(row) {
+            await this.$confirm('删除此条记录？');
+            // 删除记录也要校验？不，删除通常是增加余额（如果是调休记录）或减少余额（加班记录）。
+            // 但如果删除一条加班记录导致总数变负，我们也应该提示。
+            if (this.total - row.amount < 0) {
+                return this.$message.error('无法删除：删除此记录会导致调休余额不足！');
+            }
+            await AV.Object.createWithoutData('OTLog', row.id).destroy();
+            this.fetchData();
         },
         handleUserCommand(cmd) {
             if (cmd === 'ADD_NEW') this.forceLogin();
+            else if (cmd === 'MANAGE_MEMBERS') this.memberDialogVisible = true;
             else if (cmd === 'LOGOUT') { localStorage.removeItem('ot_user'); location.reload(); }
-            else { this.user = cmd; this.saveLocal(); this.fetchData(); }
         }
     }
 })
