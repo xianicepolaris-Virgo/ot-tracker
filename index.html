@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>团队调休管家 - Cloud Version</title>
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <script src="https://cdn.jsdelivr.net/npm/leancloud-storage@4.12.0/dist/av-min.js"></script>
+    <script src="https://unpkg.com/vue@2.6.14/dist/vue.js"></script>
+    <script src="https://unpkg.com/element-ui/lib/index.js"></script>
+    <style>
+        body { background-color: #f0f2f5; font-family: "PingFang SC","Helvetica Neue",Arial,sans-serif; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; }
+        .header-card { background: linear-gradient(120deg, #1565C0, #1E88E5); color: white; border-radius: 12px; margin-bottom: 20px; }
+        .total-num { font-size: 50px; font-weight: bold; margin: 15px 0; }
+        .user-tag { background: rgba(255,255,255,0.2); border: none; color: white; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+<div id="app" class="container">
+    <el-card class="header-card" v-loading="loading">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div>
+                <el-tag class="user-tag" effect="dark" size="medium">{{ currentUser }} 的账户</el-tag>
+                <div style="font-size: 14px; opacity: 0.8;">剩余可用调休</div>
+                <div class="total-num">{{ totalDays.toFixed(1) }} <span style="font-size: 20px;">天</span></div>
+            </div>
+            <el-select v-model="currentUser" @change="fetchData" placeholder="切换用户" size="small" style="width: 120px">
+                <el-option v-for="u in userList" :key="u" :label="u" :value="u"></el-option>
+                <el-option label="+ 新用户" value="new_user" @click.native="addNewUser"></el-option>
+            </el-select>
+        </div>
+    </el-card>
+
+    <el-card style="border-radius: 12px; margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-around;">
+            <el-button type="primary" icon="el-icon-circle-plus-outline" circle @click="addLog(1, '加班')"></el-button>
+            <span style="line-height: 40px;">加班 1天</span>
+            <el-button type="success" icon="el-icon-circle-plus-outline" circle @click="addLog(0.5, '加班')"></el-button>
+            <span style="line-height: 40px;">加班 0.5天</span>
+            <el-button type="warning" icon="el-icon-remove-outline" circle @click="showUseDialog = true"></el-button>
+            <span style="line-height: 40px;">用调休</span>
+            <el-button icon="el-icon-edit" circle @click="showAdjustDialog = true"></el-button>
+            <span style="line-height: 40px;">校准</span>
+        </div>
+    </el-card>
+
+    <el-card style="border-radius: 12px;">
+        <div slot="header">📑 最近变动明细</div>
+        <el-table :data="logs" stripe size="small" v-loading="loading">
+            <el-table-column prop="date" label="时间" width="110"></el-table-column>
+            <el-table-column label="变动">
+                <template slot-scope="scope">
+                    <b :style="{color: scope.row.amount >= 0 ? '#67C23A' : '#F56C6C'}">
+                        {{ scope.row.amount > 0 ? '+' + scope.row.amount : scope.row.amount }}
+                    </b>
+                </template>
+            </el-table-column>
+            <el-table-column prop="note" label="备注"></el-table-column>
+        </el-table>
+    </el-card>
+
+    <el-dialog title="我要调休" :visible.sync="showUseDialog" width="90%">
+        <el-input-number v-model="form.amount" :step="0.5" :min="0.5" style="width:100%"></el-input-number>
+        <el-input v-model="form.note" placeholder="备注（如：周五下午）" style="margin-top:15px"></el-input>
+        <div slot="footer"><el-button type="primary" @click="addLog(-form.amount, form.note || '使用调休')" block>确认提交</el-button></div>
+    </el-dialog>
+
+    <el-dialog title="校准/设定总数" :visible.sync="showAdjustDialog" width="90%">
+        <p style="font-size: 12px; color: #999;">这将新增一条“校准”记录，使总数达到你设定的值。</p>
+        <el-input-number v-model="adjustVal" :step="0.5" style="width:100%"></el-input-number>
+        <div slot="footer"><el-button type="danger" @click="handleAdjust">确认校准</el-button></div>
+    </el-dialog>
+</div>
+
+<script>
+// --- 核心配置：请填入你的 LeanCloud 信息 ---
+AV.init({
+  appId: "Mz4sDbBvDWL73JIex95G2Oyk-gzGzoHsz", 
+  appKey: "drSmabDFOB0U5L0p49KVBqWP",
+  serverURL: "https://mz4sdbbv.lc-cn-n1-shared.com" // 若无域名，LeanCloud后台会提供一个临时测试域名
+});
+const OTLog = AV.Object.extend('OTLog');
+
+new Vue({
+    el: '#app',
+    data: {
+        loading: false,
+        currentUser: '默认用户',
+        userList: ['默认用户', '张三', '李四'],
+        logs: [],
+        totalDays: 0,
+        showUseDialog: false,
+        showAdjustDialog: false,
+        form: { amount: 0.5, note: '' },
+        adjustVal: 0
+    },
+    mounted() { this.fetchData(); },
+    methods: {
+        // 从云端抓取数据
+        async fetchData() {
+            if (this.currentUser === 'new_user') return;
+            this.loading = true;
+            try {
+                const query = new AV.Query('OTLog');
+                query.equalTo('user', this.currentUser);
+                query.descending('createdAt');
+                const results = await query.find();
+                
+                this.logs = results.map(r => ({
+                    id: r.id,
+                    date: r.createdAt.toLocaleDateString(),
+                    amount: r.get('amount'),
+                    note: r.get('note')
+                }));
+                this.totalDays = this.logs.reduce((sum, r) => sum + r.amount, 0);
+            } finally { this.loading = false; }
+        },
+        // 新增记录到云端
+        async addLog(amt, note) {
+            this.loading = true;
+            const log = new OTLog();
+            log.set('user', this.currentUser);
+            log.set('amount', amt);
+            log.set('note', note);
+            await log.save();
+            this.$message.success('已同步至云端');
+            this.showUseDialog = false;
+            this.fetchData();
+        },
+        // 校准逻辑：计算差值并补全
+        handleAdjust() {
+            const diff = this.adjustVal - this.totalDays;
+            this.addLog(diff, '手动校准总数');
+            this.showAdjustDialog = false;
+        },
+        addNewUser() {
+            this.$prompt('请输入新同事的名字', '新增用户', {
+                confirmButtonText: '确定',
+                cancelButtonText: '取消'
+            }).then(({ value }) => {
+                if(value) {
+                    this.userList.push(value);
+                    this.currentUser = value;
+                    this.fetchData();
+                }
+            });
+        }
+    }
+})
+</script>
+</body>
+</html>
