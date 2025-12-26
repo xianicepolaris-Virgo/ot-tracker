@@ -3,189 +3,194 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>调休管家 - 云端版</title>
+    <title>调休管家 - 专业进阶版</title>
     <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
     <script src="https://cdn.jsdelivr.net/npm/leancloud-storage@4.12.0/dist/av-min.js"></script>
     <script src="https://unpkg.com/vue@2.6.14/dist/vue.js"></script>
     <script src="https://unpkg.com/element-ui/lib/index.js"></script>
     <style>
-        body { background-color: #f5f7fa; margin: 0; padding: 15px; font-family: "Helvetica Neue",Arial,sans-serif; }
-        .app-container { max-width: 500px; margin: 0 auto; }
+        body { background-color: #f5f7fa; margin: 0; padding: 10px; font-family: "Helvetica Neue",Arial,sans-serif; }
+        .app-container { max-width: 600px; margin: 0 auto; }
         .header-card { 
-            background: linear-gradient(135deg, #1890ff 0%, #36cfc9 100%); 
-            color: white; border-radius: 12px; border: none; min-height: 160px;
-            box-shadow: 0 4px 12px rgba(24, 144, 255, 0.3);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+            color: white; border-radius: 12px; border: none; margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(118, 75, 162, 0.3);
         }
-        .total-display { font-size: 52px; font-weight: bold; margin: 10px 0; }
-        .op-btn-group p { font-size: 13px; color: #606266; margin-top: 8px; }
-        .footer { text-align: center; color: #909399; font-size: 12px; margin-top: 30px; }
+        .total-display { font-size: 48px; font-weight: bold; margin: 10px 0; }
+        .footer { text-align: center; color: #909399; font-size: 12px; margin-top: 20px; }
+        .el-button--circle { font-size: 18px; }
     </style>
 </head>
 <body>
 <div id="app" class="app-container">
-    <el-card class="header-card" v-loading="loading" element-loading-background="rgba(24, 144, 255, 0.8)">
+    <el-card class="header-card" v-loading="loading" element-loading-background="rgba(102, 126, 234, 0.7)">
         <div v-if="user" style="display: flex; justify-content: space-between; align-items: center;">
-            <el-tag effect="plain" size="small" style="background: rgba(255,255,255,0.2); color: white; border:none;">
-                👤 {{ user }}
-            </el-tag>
-            <el-dropdown trigger="click" @command="handleUserCommand">
-                <span class="el-dropdown-link" style="color: white; cursor: pointer; font-size: 14px;">
-                    管理账户 <i class="el-icon-setting el-icon--right"></i>
-                </span>
+            <el-tag effect="dark" size="small" style="background: rgba(255,255,255,0.3); border:none;">👤 {{ user }}</el-tag>
+            <el-dropdown @command="handleUserCommand">
+                <span style="color: white; cursor: pointer; font-size: 14px;">账户管理 <i class="el-icon-arrow-down"></i></span>
                 <el-dropdown-menu slot="dropdown">
                     <el-dropdown-item v-for="u in userList" :key="u" :command="u">{{ u }}</el-dropdown-item>
-                    <el-dropdown-item command="ADD_NEW" divided style="color: #409EFF; font-weight: bold;">+ 添加新成员</el-dropdown-item>
+                    <el-dropdown-item command="ADD_NEW" divided>+ 新成员</el-dropdown-item>
                     <el-dropdown-item command="LOGOUT" style="color: #F56C6C;">退出当前</el-dropdown-item>
                 </el-dropdown-menu>
             </el-dropdown>
         </div>
-        
-        <div v-if="user" style="text-align: center; margin-top: 20px;">
-            <div style="font-size: 14px; opacity: 0.9;">当前剩余调休 (天)</div>
-            <div class="total-display">{{ total.toFixed(1) }}</div>
+        <div v-if="user" style="text-align: center; margin-top: 10px;">
+            <div style="font-size: 13px; opacity: 0.8;">当前可调休余额</div>
+            <div class="total-display">{{ total.toFixed(1) }} <small style="font-size: 18px">天</small></div>
         </div>
     </el-card>
 
-    <el-row :gutter="15" style="margin-top: 25px; text-align: center;" class="op-btn-group">
-        <el-col :span="8">
-            <el-button type="primary" icon="el-icon-plus" circle @click="addRecord(1, '加班')" :disabled="!user"></el-button>
-            <p>加班 1天</p>
-        </el-col>
-        <el-col :span="8">
-            <el-button type="success" icon="el-icon-plus" circle @click="addRecord(0.5, '加班')" :disabled="!user"></el-button>
-            <p>加班 0.5天</p>
-        </el-col>
-        <el-col :span="8">
-            <el-button type="warning" icon="el-icon-minus" circle @click="showUseDialog = true" :disabled="!user"></el-button>
-            <p>用调休</p>
-        </el-col>
-    </el-row>
+    <div style="text-align: center; margin-bottom: 20px;">
+        <el-button type="primary" icon="el-icon-plus" round @click="openDialog('ADD')">新增记录 (加班/调休)</el-button>
+    </div>
 
-    <el-table :data="logs" style="width: 100%; border-radius: 8px; margin-top: 20px;" size="mini" stripe v-if="user">
-        <el-table-column prop="date" label="日期" width="110"></el-table-column>
-        <el-table-column label="变动">
+    <el-table :data="logs" stripe size="small" style="width: 100%; border-radius: 10px;" v-if="user">
+        <el-table-column prop="logDate" label="日期" width="105"></el-table-column>
+        <el-table-column label="天数" width="70">
             <template slot-scope="scope">
-                <span :style="{color: scope.row.amount > 0 ? '#67C23A' : '#F56C6C', fontWeight: 'bold'}">
+                <b :style="{color: scope.row.amount > 0 ? '#67C23A' : '#F56C6C'}">
                     {{ scope.row.amount > 0 ? '+' + scope.row.amount : scope.row.amount }}
-                </span>
+                </b>
             </template>
         </el-table-column>
         <el-table-column prop="note" label="备注" show-overflow-tooltip></el-table-column>
+        <el-table-column label="操作" width="100" align="right">
+            <template slot-scope="scope">
+                <el-button type="text" icon="el-icon-edit" @click="openDialog('EDIT', scope.row)"></el-button>
+                <el-button type="text" icon="el-icon-delete" style="color: #F56C6C" @click="handleDelete(scope.row)"></el-button>
+            </template>
+        </el-table-column>
     </el-table>
 
-    <div class="footer">
-        多人协作调休系统 · 实时同步云端
-    </div>
+    <div class="footer">数据已同步至 LeanCloud · 仅供内部学习使用</div>
 
-    <el-dialog title="使用调休天数" :visible.sync="showUseDialog" width="90%" center>
-        <el-input-number v-model="useVal" :step="0.5" :min="0.5" style="width:100%"></el-input-number>
-        <el-input v-model="useNote" placeholder="调休事由" style="margin-top:15px"></el-input>
-        <span slot="footer"><el-button type="primary" @click="handleUse" style="width: 100%">确认扣减</el-button></span>
+    <el-dialog :title="isEdit ? '编辑记录' : '新增加班/调休'" :visible.sync="dialogVisible" width="90%" center>
+        <el-form label-position="top">
+            <el-form-item label="日期">
+                <el-date-picker v-model="form.logDate" type="date" placeholder="选择日期" style="width: 100%" value-format="yyyy-MM-dd"></el-date-picker>
+            </el-form-item>
+            <el-form-item label="天数变动 (加班填正数，调休填负数)">
+                <el-input-number v-model="form.amount" :precision="1" :step="0.5" style="width: 100%"></el-input-number>
+            </el-form-item>
+            <el-form-item label="备注说明">
+                <el-input v-model="form.note" placeholder="如：XX项目加班 / 周五调休"></el-input>
+            </el-form-item>
+        </el-form>
+        <div slot="footer">
+            <el-button @click="dialogVisible = false">取消</el-button>
+            <el-button type="primary" @click="submitForm" :loading="loading">保存到云端</el-button>
+        </div>
     </el-dialog>
 </div>
 
 <script>
-// --- 核心配置（已根据您的信息更新） ---
+// --- 配置信息 (已填入你的 AppID 和 Key) ---
 AV.init({
   appId: "Mz4sDbBvDWL73JIex95G2Oyk-gzGzoHsz",
   appKey: "drSmabDFOB0U5L0p49KVBqWP",
   serverURL: "https://mz4sdbbv.lc-cn-n1-shared.com" 
 });
-
 const OTLog = AV.Object.extend('OTLog');
 
 new Vue({
     el: '#app',
     data: {
-        user: localStorage.getItem('ot_user') || '', 
-        userList: JSON.parse(localStorage.getItem('ot_user_list')) || [], 
+        user: localStorage.getItem('ot_user') || '',
+        userList: JSON.parse(localStorage.getItem('ot_user_list')) || [],
         loading: false,
         total: 0,
         logs: [],
-        showUseDialog: false,
-        useVal: 0.5,
-        useNote: ''
+        dialogVisible: false,
+        isEdit: false,
+        form: { id: '', logDate: '', amount: 1, note: '' }
     },
-    async mounted() {
-        if (!this.user) {
-            this.forceLogin();
-        } else {
-            this.fetchData();
-        }
+    mounted() {
+        if (!this.user) this.forceLogin();
+        else this.fetchData();
     },
     methods: {
+        // 强制姓名输入
         forceLogin() {
-            this.$prompt('欢迎！请输入姓名开始记录', '初始化', {
-                confirmButtonText: '确定',
-                showCancelButton: false,
-                inputPattern: /\S+/,
-                inputErrorMessage: '姓名不能为空'
+            this.$prompt('请输入姓名开始记录', '初始化', {
+                confirmButtonText: '确定', showCancelButton: false, inputPattern: /\S+/, inputErrorMessage: '姓名不能为空'
             }).then(({ value }) => {
                 this.user = value;
-                if (!this.userList.includes(value)) {
-                    this.userList.push(value);
-                }
-                this.saveLocalInfo();
+                if (!this.userList.includes(value)) this.userList.push(value);
+                this.saveLocal();
                 this.fetchData();
             });
         },
-        saveLocalInfo() {
+        saveLocal() {
             localStorage.setItem('ot_user', this.user);
             localStorage.setItem('ot_user_list', JSON.stringify(this.userList));
         },
-        handleUserCommand(cmd) {
-            if (cmd === 'ADD_NEW') {
-                this.forceLogin();
-            } else if (cmd === 'LOGOUT') {
-                localStorage.removeItem('ot_user');
-                location.reload();
-            } else {
-                this.user = cmd;
-                this.saveLocalInfo();
-                this.fetchData();
-            }
-        },
+        // 抓取数据
         async fetchData() {
             if (!this.user) return;
             this.loading = true;
             try {
                 const query = new AV.Query('OTLog');
                 query.equalTo('user', this.user);
-                query.descending('createdAt');
-                query.limit(20);
+                query.descending('logDate'); // 按用户填写的日期排序
                 const results = await query.find();
                 this.logs = results.map(r => ({
-                    date: r.createdAt.toLocaleDateString(),
+                    id: r.id,
+                    logDate: r.get('logDate'),
                     amount: r.get('amount'),
                     note: r.get('note')
                 }));
                 this.total = this.logs.reduce((sum, r) => sum + r.amount, 0);
-            } catch (err) {
-                this.$message.error('云端读取失败');
-            } finally {
-                this.loading = false;
-            }
+            } finally { this.loading = false; }
         },
-        async addRecord(amt, note) {
+        // 打开弹窗（新增或编辑）
+        openDialog(mode, row = null) {
+            this.isEdit = mode === 'EDIT';
+            if (this.isEdit) {
+                this.form = { ...row };
+            } else {
+                this.form = { id: '', logDate: new Date().toISOString().split('T')[0], amount: 1, note: '' };
+            }
+            this.dialogVisible = true;
+        },
+        // 提交表单（保存或更新）
+        async submitForm() {
+            if (!this.form.logDate) return this.$message.error('请选择日期');
             this.loading = true;
             try {
-                const log = new OTLog();
-                log.set('user', this.user);
-                log.set('amount', amt);
-                log.set('note', note);
+                let log;
+                if (this.isEdit) {
+                    log = AV.Object.createWithoutData('OTLog', this.form.id);
+                } else {
+                    log = new OTLog();
+                    log.set('user', this.user);
+                }
+                log.set('logDate', this.form.logDate);
+                log.set('amount', this.form.amount);
+                log.set('note', this.form.note);
                 await log.save();
-                this.$message.success('云端已更新');
+                this.$message.success(this.isEdit ? '已成功修改' : '已成功新增');
+                this.dialogVisible = false;
                 this.fetchData();
-            } catch (err) {
-                this.$message.error('同步失败');
-            } finally {
-                this.loading = false;
-            }
+            } catch (e) {
+                this.$message.error('云端保存失败');
+            } finally { this.loading = false; }
         },
-        handleUse() {
-            this.addRecord(-this.useVal, this.useNote || '调休使用');
-            this.showUseDialog = false;
-            this.useNote = '';
+        // 删除记录
+        handleDelete(row) {
+            this.$confirm(`确定要删除 ${row.logDate} 的这条记录吗？`, '警告', {
+                confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning'
+            }).then(async () => {
+                const log = AV.Object.createWithoutData('OTLog', row.id);
+                await log.destroy();
+                this.$message.success('已删除');
+                this.fetchData();
+            });
+        },
+        handleUserCommand(cmd) {
+            if (cmd === 'ADD_NEW') this.forceLogin();
+            else if (cmd === 'LOGOUT') { localStorage.removeItem('ot_user'); location.reload(); }
+            else { this.user = cmd; this.saveLocal(); this.fetchData(); }
         }
     }
 })
