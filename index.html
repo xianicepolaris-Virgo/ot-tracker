@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>调休管家 - 有效期提醒版</title>
+    <title>调休管家 - 增强延期版</title>
     <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
     <script src="https://cdn.jsdelivr.net/npm/leancloud-storage@4.12.0/dist/av-min.js"></script>
     <script src="https://unpkg.com/vue@2.6.14/dist/vue.js"></script>
@@ -22,6 +22,7 @@
         .footer { text-align: center; color: #909399; font-size: 12px; margin-top: 20px; }
         .chart-container { height: 450px; width: 100%; }
         .card-title { font-weight: bold; margin-bottom: 15px; display: flex; align-items: center; justify-content: space-between; color: #303133; }
+        .el-tag--mini { margin-right: 2px; }
         
         @media (max-width: 768px) {
             .el-col { width: 100% !important; margin-bottom: 10px; }
@@ -32,73 +33,78 @@
 <body>
 <div id="app" class="app-container">
     <el-row :gutter="15">
-        <el-col :span="10">
+        <el-col :span="11">
             <el-card class="header-card" v-loading="loading">
                 <div v-if="user" style="display: flex; justify-content: space-between; align-items: center;">
                     <el-tag effect="dark" size="small" style="background: rgba(255,255,255,0.3); border:none;">👤 管理员: {{ user }}</el-tag>
                     <el-dropdown @command="handleUserCommand">
-                        <span style="color: white; cursor: pointer; font-size: 14px;">设置 <i class="el-icon-arrow-down"></i></span>
+                        <span style="color: white; cursor: pointer; font-size: 14px;">系统设置 <i class="el-icon-arrow-down"></i></span>
                         <el-dropdown-menu slot="dropdown">
-                            <el-dropdown-item command="MANAGE_MEMBERS" icon="el-icon-user-solid">成员管理</el-dropdown-item>
-                            <el-dropdown-item command="LOGOUT" icon="el-icon-switch-button">注销</el-dropdown-item>
+                            <el-dropdown-item command="MANAGE_MEMBERS" icon="el-icon-user-solid">成员名单管理</el-dropdown-item>
+                            <el-dropdown-item command="LOGOUT" icon="el-icon-switch-button" style="color: #F56C6C;">退出登录</el-dropdown-item>
                         </el-dropdown-menu>
                     </el-dropdown>
                 </div>
                 <div v-if="user" style="text-align: center; margin-top: 10px;">
-                    <div style="font-size: 13px; opacity: 0.9;">我的可用调休 (未过期)</div>
+                    <div style="font-size: 13px; opacity: 0.9;">我的有效余额 (含已延期)</div>
                     <div class="total-display">{{ myAvailableTotal.toFixed(1) }} <small style="font-size: 16px">天</small></div>
-                    <div style="font-size: 11px; opacity: 0.8;">(有效期：加班后30天内)</div>
+                    <div style="font-size: 11px; opacity: 0.8;">默认有效期 30 天，支持手动延期</div>
                 </div>
             </el-card>
 
-            <div v-if="expiringSoonRecords.length > 0" class="expire-alert">
+            <div v-if="expiringSoonCount > 0" class="expire-alert">
                 <i class="el-icon-warning" style="margin-right: 8px; font-size: 16px;"></i>
-                <span>注意：您有 <strong>{{ expiringSoonCount.toFixed(1) }}</strong> 天调休即将在 7 天内过期！</span>
+                <span>提醒：有 <strong>{{ expiringSoonCount.toFixed(1) }}</strong> 天调休即将到期，请及时休假或点击“延期”。</span>
             </div>
 
             <el-card style="border-radius: 12px;">
                 <div slot="header" class="card-title">
-                    <span><i class="el-icon-time"></i> 调休详情(先进先出)</span>
+                    <span><i class="el-icon-time"></i> 加班及抵扣明细</span>
                     <div>
-                        <el-button type="primary" size="mini" round @click="openDialog('ADD')">登记</el-button>
-                        <el-button type="success" size="mini" round @click="batchDialogVisible = true">导入</el-button>
+                        <el-button type="primary" size="mini" round @click="openDialog">登记</el-button>
+                        <el-button type="success" size="mini" round @click="batchDialogVisible = true">批量</el-button>
                     </div>
                 </div>
                 
-                <el-table :data="processedLogs" stripe size="mini" style="width: 100%" max-height="450">
-                    <el-table-column prop="logDate" label="加班日期" width="95"></el-table-column>
+                <el-table :data="processedLogs" stripe size="mini" style="width: 100%" max-height="500">
+                    <el-table-column prop="logDate" label="日期" width="90"></el-table-column>
                     <el-table-column label="状态" width="85">
                         <template slot-scope="scope">
-                            <el-tag v-if="scope.row.amount < 0" size="mini" type="info">抵扣记录</el-tag>
-                            <template v-else>
+                            <template v-if="scope.row.amount > 0">
                                 <el-tag v-if="scope.row.status === '已过期'" size="mini" type="danger">已过期</el-tag>
                                 <el-tag v-else-if="scope.row.status === '已抵扣'" size="mini" type="success">已用完</el-tag>
                                 <el-tag v-else-if="scope.row.status === '即将过期'" size="mini" type="warning">剩{{scope.row.daysLeft}}天</el-tag>
-                                <el-tag v-else size="mini">可用</el-tag>
+                                <el-tag v-else size="mini" type="primary">可用</el-tag>
+                                <div v-if="scope.row.extDays > 0" style="font-size: 10px; color: #409EFF;">已加{{scope.row.extDays}}天</div>
                             </template>
+                            <el-tag v-else size="mini" type="info">调休扣减</el-tag>
                         </template>
                     </el-table-column>
-                    <el-table-column label="天数" width="60">
+                    <el-table-column label="天数" width="55">
                         <template slot-scope="scope">
-                            <span :style="{color: scope.row.amount > 0 ? '#67C23A' : '#F56C6C', fontWeight:'bold'}">
+                            <b :style="{color: scope.row.amount > 0 ? '#67C23A' : '#F56C6C'}">
                                 {{ scope.row.amount > 0 ? '+' + scope.row.amount : scope.row.amount }}
-                            </span>
+                            </b>
                         </template>
                     </el-table-column>
-                    <el-table-column prop="note" label="备注" show-overflow-tooltip></el-table-column>
-                    <el-table-column label="操作" width="40">
+                    <el-table-column label="操作">
                         <template slot-scope="scope">
-                            <el-button type="text" icon="el-icon-delete" style="color: #F56C6C" @click="handleDelete(scope.row)"></el-button>
+                            <div style="display: flex; align-items: center;">
+                                <el-button v-if="scope.row.amount > 0 && scope.row.status !== '已抵扣'" 
+                                    type="text" size="mini" icon="el-icon-refresh-right" 
+                                    @click="handleExtend(scope.row)">延期</el-button>
+                                <el-button type="text" icon="el-icon-delete" style="color: #F56C6C; margin-left: 5px;" @click="handleDelete(scope.row)"></el-button>
+                            </div>
                         </template>
                     </el-table-column>
                 </el-table>
             </el-card>
         </el-col>
 
-        <el-col :span="14">
-            <el-card style="border-radius: 12px;">
+        <el-col :span="13">
+            <el-card style="border-radius: 12px; min-height: 500px;">
                 <div slot="header" class="card-title">
-                    <span><i class="el-icon-data-line"></i> 全员可用余额 (扣除过期)</span>
+                    <span><i class="el-icon-data-analysis"></i> 全员实时可用余额 (天)</span>
                     <el-button icon="el-icon-refresh" size="mini" circle @click="fetchAllData"></el-button>
                 </div>
                 <div id="mainChart" class="chart-container"></div>
@@ -106,17 +112,17 @@
         </el-col>
     </row>
 
-    <el-dialog title="调休登记" :visible.sync="dialogVisible" width="500px" center>
+    <el-dialog title="新增调休/加班登记" :visible.sync="dialogVisible" width="500px" center>
         <el-form label-position="top">
             <el-form-item label="目标成员">
-                <el-select v-model="form.targetUser" filterable allow-create default-first-option placeholder="选人或新录入" style="width:100%">
+                <el-select v-model="form.targetUser" filterable allow-create placeholder="请选择或输入" style="width:100%">
                     <el-option v-for="item in userList" :key="item" :label="item" :value="item"></el-option>
                 </el-select>
             </el-form-item>
-            <el-row :gutter="10">
+            <el-row :gutter="15">
                 <el-col :span="12">
                     <el-form-item label="类型">
-                        <el-radio-group v-model="form.type" size="medium">
+                        <el-radio-group v-model="form.type">
                             <el-radio-button label="plus">加班(+)</el-radio-button>
                             <el-radio-button label="minus">调休(-)</el-radio-button>
                         </el-radio-group>
@@ -132,21 +138,34 @@
                 <el-date-picker v-model="form.logDate" type="date" style="width: 100%" value-format="yyyy-MM-dd"></el-date-picker>
             </el-form-item>
             <el-form-item label="备注">
-                <el-input v-model="form.note" placeholder="备注事由"></el-input>
+                <el-input v-model="form.note" placeholder="备注信息"></el-input>
             </el-form-item>
         </el-form>
         <div slot="footer">
             <el-button @click="dialogVisible = false">取消</el-button>
-            <el-button type="primary" @click="submitForm" :loading="loading">保存记录</el-button>
+            <el-button type="primary" @click="submitForm" :loading="loading">保存</el-button>
         </div>
     </el-dialog>
 
-    <el-dialog title="🚀 批量导入" :visible.sync="batchDialogVisible" width="600px">
-        <el-input type="textarea" :rows="8" v-model="batchText" placeholder="姓名,日期,天数,备注"></el-input>
-        <div slot="footer"><el-button type="primary" @click="handleBatchImport">开始导入</el-button></div>
+    <el-dialog title="🚀 批量数据导入" :visible.sync="batchDialogVisible" width="600px">
+        <el-alert title="格式：姓名,日期,天数,备注 (每行一条)" type="info" style="margin-bottom: 10px;"></el-alert>
+        <el-input type="textarea" :rows="10" v-model="batchText" placeholder="张三,2026-04-01,0.5,加班..."></el-input>
+        <div slot="footer"><el-button type="primary" @click="handleBatchImport" :loading="loading">确认导入</el-button></div>
     </el-dialog>
 
-    <div class="footer">有效期算法：加班后30日内有效 · 先进先出抵扣逻辑</div>
+    <el-dialog title="👥 全员名单管理" :visible.sync="memberDialogVisible" width="550px">
+        <el-table :data="userListForTable" size="small" height="400">
+            <el-table-column label="姓名" prop="name"></el-table-column>
+            <el-table-column label="操作" width="180">
+                <template slot-scope="scope">
+                    <el-button size="mini" type="text" @click="renameMember(scope.row.name)">改名</el-button>
+                    <el-button size="mini" type="text" style="color: #F56C6C" @click="removeMember(scope.row.name)">删除全量记录</el-button>
+                </template>
+            </el-table-column>
+        </el-table>
+    </el-dialog>
+
+    <div class="footer">逻辑说明：加班默认30天过期 · 延期操作每次+30天 · 抵扣遵循先进先出</div>
 </div>
 
 <script>
@@ -166,25 +185,20 @@ new Vue({
         loading: false,
         dialogVisible: false,
         batchDialogVisible: false,
+        memberDialogVisible: false, // 修复：必须在data中声明
         batchText: '',
         form: { targetUser: '', type: 'plus', logDate: '', displayAmount: 0.5, note: '' },
         chart: null
     },
     computed: {
-        // 核心：处理当前用户的有效期与抵扣逻辑
-        processedLogs() {
-            return this.calculateUserStats(this.user).logs;
+        processedLogs() { return this.calculateUserStats(this.user).logs; },
+        myAvailableTotal() { return this.calculateUserStats(this.user).availableBalance; },
+        expiringSoonCount() { 
+            return this.processedLogs
+                .filter(l => l.status === '即将过期')
+                .reduce((sum, l) => sum + (l.remaining || 0), 0); 
         },
-        myAvailableTotal() {
-            return this.calculateUserStats(this.user).availableBalance;
-        },
-        expiringSoonRecords() {
-            return this.processedLogs.filter(l => l.status === '即将过期');
-        },
-        expiringSoonCount() {
-            return this.expiringSoonRecords.reduce((sum, l) => sum + (l.remaining || 0), 0);
-        },
-        // 全员统计数据（用于图表）
+        userListForTable() { return this.userList.map(name => ({ name })); },
         allUsersStats() {
             return this.userList.map(u => ({
                 name: u,
@@ -197,7 +211,7 @@ new Vue({
         else this.fetchAllData();
     },
     methods: {
-        // --- 核心算法：先进先出抵扣 + 30天过期判定 ---
+        // --- 核心算法：带延期补偿的 FIFO 逻辑 ---
         calculateUserStats(username) {
             const userLogs = this.allRawLogs
                 .filter(l => l.get('user') === username)
@@ -205,10 +219,10 @@ new Vue({
                     id: l.id,
                     logDate: l.get('logDate'),
                     amount: l.get('amount'),
-                    note: l.get('note')
+                    note: l.get('note'),
+                    extDays: l.get('extDays') || 0 // 获取延期天数
                 }));
 
-            // 分离加班(正)和调休(负)
             let plusLogs = userLogs.filter(l => l.amount > 0).sort((a, b) => a.logDate.localeCompare(b.logDate));
             let minusTotal = Math.abs(userLogs.filter(l => l.amount < 0).reduce((sum, l) => sum + l.amount, 0));
             
@@ -216,36 +230,31 @@ new Vue({
             let availableBalance = 0;
 
             plusLogs.forEach(log => {
-                // 1. 计算过期时间
-                const dateParts = log.logDate.split('-');
-                const expireDate = new Date(dateParts[0], dateParts[1] - 1, dateParts[2]);
-                expireDate.setDate(expireDate.getDate() + 30);
+                // 计算到期日 = 原始日期 + 30天 + 延期天数
+                const d = new Date(log.logDate);
+                d.setDate(d.getDate() + 30 + log.extDays);
                 
-                // 2. 抵扣逻辑 (先进先出)
                 let consumed = Math.min(log.amount, minusTotal);
                 log.remaining = log.amount - consumed;
                 minusTotal -= consumed;
 
-                // 3. 判定状态
-                const diffDays = Math.ceil((expireDate - today) / (1000 * 60 * 60 * 24));
-                log.expireDate = expireDate.toISOString().split('T')[0];
+                const diffDays = Math.ceil((d - today) / (1000 * 60 * 60 * 24));
+                log.expiryDateFull = d.toISOString().split('T')[0];
                 log.daysLeft = diffDays;
 
                 if (log.remaining <= 0) {
                     log.status = '已抵扣';
                 } else if (diffDays <= 0) {
                     log.status = '已过期';
-                    log.remaining = 0; // 过期不计入余额
+                    log.remaining = 0; 
                 } else if (diffDays <= 7) {
                     log.status = '即将过期';
                 } else {
                     log.status = '有效';
                 }
-                
                 availableBalance += log.remaining;
             });
 
-            // 合并记录用于表格显示 (保持日期倒序)
             const displayLogs = [...userLogs].sort((a, b) => b.logDate.localeCompare(a.logDate));
             displayLogs.forEach(d => {
                 const match = plusLogs.find(p => p.id === d.id);
@@ -266,10 +275,25 @@ new Vue({
             } finally { this.loading = false; }
         },
 
+        // --- 新增：延期操作 ---
+        async handleExtend(row) {
+            this.loading = true;
+            try {
+                const log = AV.Object.createWithoutData('OTLog', row.id);
+                // 每次延期在原有基础上再加 30 天
+                const currentExt = row.extDays || 0;
+                log.set('extDays', currentExt + 30);
+                await log.save();
+                this.$message.success(`已为该记录延期 30 天 (累计延期 ${currentExt + 30} 天)`);
+                await this.fetchAllData();
+            } finally { this.loading = false; }
+        },
+
         renderChart() {
             if (!this.chart) this.chart = echarts.init(document.getElementById('mainChart'));
             this.chart.setOption({
                 tooltip: { trigger: 'axis' },
+                grid: { left: '3%', right: '15%', bottom: '3%', containLabel: true },
                 xAxis: { type: 'value' },
                 yAxis: { type: 'category', data: this.allUsersStats.map(i => i.name) },
                 series: [{
@@ -278,7 +302,7 @@ new Vue({
                         value: i.value,
                         itemStyle: { color: i.value > 0 ? '#1890ff' : '#ff4d4f' }
                     })),
-                    label: { show: true, position: 'right', formatter: '{c}天' }
+                    label: { show: true, position: 'right', formatter: '{c}d' }
                 }]
             }, true);
         },
@@ -297,44 +321,83 @@ new Vue({
                 log.set('logDate', this.form.logDate);
                 log.set('amount', delta);
                 log.set('note', this.form.note);
+                log.set('extDays', 0); // 初始延期天数为0
                 await log.save();
                 this.dialogVisible = false;
                 await this.fetchAllData();
-                this.$message.success('记录已保存');
             } finally { this.loading = false; }
         },
 
+        handleUserCommand(cmd) {
+            if (cmd === 'MANAGE_MEMBERS') {
+                this.memberDialogVisible = true; // 修复：确保这里能触发
+            } else if (cmd === 'LOGOUT') {
+                localStorage.removeItem('ot_user');
+                location.reload();
+            }
+        },
+
+        async renameMember(oldName) {
+            const { value: newName } = await this.$prompt(`将 "${oldName}" 改名为:`, '改名', { inputValue: oldName });
+            if (newName && newName !== oldName) {
+                this.loading = true;
+                const query = new AV.Query('OTLog');
+                query.equalTo('user', oldName);
+                const records = await query.limit(1000).find();
+                records.forEach(r => r.set('user', newName.trim()));
+                await AV.Object.saveAll(records);
+                if (this.user === oldName) {
+                    this.user = newName.trim();
+                    localStorage.setItem('ot_user', this.user);
+                }
+                await this.fetchAllData();
+                this.$message.success('更新成功');
+            }
+        },
+
+        async removeMember(target) {
+            await this.$confirm(`警告：将彻底删除 "${target}" 的所有数据！`, '危险操作', { type: 'error' });
+            this.loading = true;
+            const query = new AV.Query('OTLog');
+            query.equalTo('user', target);
+            const records = await query.limit(1000).find();
+            await AV.Object.destroyAll(records);
+            await this.fetchAllData();
+        },
+
         async handleDelete(row) {
-            await this.$confirm('确定删除该记录？');
+            await this.$confirm('确定删除？');
             await AV.Object.createWithoutData('OTLog', row.id).destroy();
             await this.fetchAllData();
         },
 
         forceLogin() {
-            this.$prompt('请输入管理员姓名', '登录', { confirmButtonText: '确定', showCancelButton: false }).then(({ value }) => {
+            this.$prompt('请输入管理员姓名', '管理登录', { confirmButtonText: '登录', showCancelButton: false }).then(({ value }) => {
                 this.user = value.trim();
                 localStorage.setItem('ot_user', this.user);
                 this.fetchAllData();
             });
         },
-        handleUserCommand(cmd) {
-            if (cmd === 'LOGOUT') { localStorage.removeItem('ot_user'); location.reload(); }
-        },
+
         async handleBatchImport() {
-            const lines = this.batchText.split('\n').filter(l => l.trim());
-            const objs = lines.map(line => {
-                const p = line.replace(/，/g, ',').split(',');
-                const log = new OTLog();
-                log.set('user', p[0].trim());
-                log.set('logDate', p[1].trim());
-                log.set('amount', parseFloat(p[2]));
-                log.set('note', p[3] || '批量导入');
-                return log;
-            });
-            await AV.Object.saveAll(objs);
-            this.batchDialogVisible = false;
-            this.batchText = '';
-            await this.fetchAllData();
+            this.loading = true;
+            try {
+                const lines = this.batchText.split('\n').filter(l => l.trim());
+                const objs = lines.map(line => {
+                    const p = line.replace(/，/g, ',').split(',');
+                    const log = new OTLog();
+                    log.set('user', p[0].trim());
+                    log.set('logDate', p[1].trim());
+                    log.set('amount', parseFloat(p[2]));
+                    log.set('note', p[3] || '批量导入');
+                    log.set('extDays', 0);
+                    return log;
+                });
+                await AV.Object.saveAll(objs);
+                this.batchDialogVisible = false;
+                this.batchText = '';
+                await this.fetchAllData();
+            } finally { this.loading = false; }
         }
     }
 })
