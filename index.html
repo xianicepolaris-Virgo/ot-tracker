@@ -3,106 +3,116 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>调休管家 - 专业管理正式版</title>
+    <title>调休管家 - 全端适配专业版</title>
     <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
     <script src="https://cdn.jsdelivr.net/npm/leancloud-storage@4.12.0/dist/av-min.js"></script>
     <script src="https://unpkg.com/vue@2.6.14/dist/vue.js"></script>
     <script src="https://unpkg.com/element-ui/lib/index.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <style>
-        body { background-color: #f0f2f5; margin: 0; padding: 0; font-family: "PingFang SC", Arial, sans-serif; }
-        .app-container { width: 100%; padding: 20px; box-sizing: border-box; min-height: 100vh; }
+        :root { --primary-color: #1890ff; --success-color: #52c41a; --danger-color: #ff4d4f; }
+        body { background-color: #f5f7fa; margin: 0; padding: 0; font-family: -apple-system, "PingFang SC", sans-serif; -webkit-font-smoothing: antialiased; }
+        .app-container { width: 100%; padding: 15px; box-sizing: border-box; }
+        
+        /* 顶部卡片样式优化 */
         .header-card { 
             background: linear-gradient(135deg, #1890ff 0%, #36cfc9 100%); 
-            color: white; border-radius: 12px; border: none; margin-bottom: 20px;
-            box-shadow: 0 4px 15px rgba(24, 144, 255, 0.2);
+            color: white; border-radius: 12px; border: none; margin-bottom: 15px;
+            box-shadow: 0 4px 12px rgba(24, 144, 255, 0.15);
         }
-        .total-display { font-size: 52px; font-weight: bold; margin: 10px 0; }
-        .expire-alert { background: #fff7e6; border: 1px solid #ffe58f; padding: 12px 20px; border-radius: 8px; margin-bottom: 20px; color: #d46b08; font-size: 14px; line-height: 1.6; }
-        .footer { text-align: center; color: #909399; font-size: 12px; margin: 30px 0; }
-        .chart-container { height: 600px; width: 100%; }
-        .card-title { font-weight: bold; font-size: 16px; display: flex; align-items: center; justify-content: space-between; color: #303133; }
-        .el-table { border-radius: 8px; }
+        .total-display { font-size: clamp(28px, 5vw, 48px); font-weight: 800; margin: 8px 0; letter-spacing: -1px; }
         
-        @media (max-width: 992px) {
-            .el-col { width: 100% !important; margin-bottom: 20px; }
-            .total-display { font-size: 38px; }
+        /* 过期警报栏 */
+        .expire-alert { background: #fff7e6; border: 1px solid #ffe58f; padding: 12px; border-radius: 10px; margin-bottom: 15px; color: #d46b08; font-size: 13px; }
+        .alert-item { padding: 4px 0; border-bottom: 1px dashed rgba(212,107,8,0.2); }
+        .alert-item:last-child { border: none; }
+
+        /* 通用卡片布局 */
+        .glass-card { border-radius: 12px; border: none; box-shadow: 0 2px 8px rgba(0,0,0,0.04); margin-bottom: 15px; }
+        .card-header-flex { display: flex; justify-content: space-between; align-items: center; width: 100%; }
+        .card-title { font-weight: 600; font-size: 15px; color: #1f1f1f; display: flex; align-items: center; gap: 6px; }
+
+        /* 核心：按钮不换行 */
+        .action-btns { display: flex; align-items: center; gap: 8px; white-space: nowrap; flex-wrap: nowrap; }
+        .btn-text { padding: 0 !important; font-weight: 500; }
+
+        /* 图表容器 */
+        .chart-wrap { height: 500px; width: 100%; }
+
+        /* 移动端深度适配 */
+        @media (max-width: 768px) {
+            .app-container { padding: 10px; }
+            .chart-wrap { height: 350px; }
+            .el-dialog { width: 95% !important; margin-top: 5vh !important; }
+            .el-form-item__label { padding-bottom: 4px !important; }
+            .el-table__header-wrapper th { background: #fafafa !important; }
         }
     </style>
 </head>
 <body>
 <div id="app" class="app-container">
-    <el-row :gutter="20">
-        <el-col :span="10">
+    <el-row :gutter="15">
+        <el-col :xs="24" :sm="24" :md="10" :lg="10">
             <el-card class="header-card" v-loading="loading">
-                <div v-if="user" style="display: flex; justify-content: space-between; align-items: center;">
-                    <el-tag effect="dark" size="small" style="background: rgba(255,255,255,0.3); border:none;">👤 视图账号: {{ user }}</el-tag>
-                    <el-dropdown @command="handleUserCommand">
-                        <span style="color: white; cursor: pointer; font-size: 14px;">管理菜单 <i class="el-icon-menu"></i></span>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <el-tag effect="dark" size="small" style="background: rgba(255,255,255,0.25); border:none;">👤 视图: {{ user }}</el-tag>
+                    <el-dropdown @command="handleUserCommand" trigger="click">
+                        <el-button type="text" style="color:white; padding:0;">设置 <i class="el-icon-setting"></i></el-button>
                         <el-dropdown-menu slot="dropdown">
-                            <el-dropdown-item command="MANAGE_MEMBERS" icon="el-icon-user">成员管理与切换</el-dropdown-item>
-                            <el-dropdown-item command="RENAME" icon="el-icon-edit">修改当前人姓名</el-dropdown-item>
-                            <el-dropdown-item command="LOGOUT" icon="el-icon-switch-button" style="color: #F56C6C;">注销系统</el-dropdown-item>
+                            <el-dropdown-item command="MANAGE_MEMBERS" icon="el-icon-user">成员管理中心</el-dropdown-item>
+                            <el-dropdown-item command="RENAME" icon="el-icon-edit">修改此人姓名</el-dropdown-item>
+                            <el-dropdown-item command="LOGOUT" icon="el-icon-switch-button" style="color: #F56C6C;">退出系统</el-dropdown-item>
                         </el-dropdown-menu>
                     </el-dropdown>
                 </div>
-                <div v-if="user" style="text-align: center; margin-top: 15px;">
-                    <div style="font-size: 14px; opacity: 0.9;">当前实时可用天数</div>
-                    <div class="total-display">{{ myAvailableTotal.toFixed(1) }} <small style="font-size: 20px">天</small></div>
+                <div style="text-align: center; margin-top: 10px;">
+                    <div style="font-size: 12px; opacity: 0.85;">有效调休余额</div>
+                    <div class="total-display">{{ myAvailableTotal.toFixed(1) }}<span style="font-size: 16px; margin-left: 4px;">天</span></div>
                 </div>
             </el-card>
 
             <div v-if="expiringSoonRecords.length > 0" class="expire-alert">
-                <div style="display: flex; align-items: flex-start;">
-                    <i class="el-icon-warning-outline" style="margin-right: 10px; font-size: 18px; margin-top: 2px;"></i>
-                    <div>
-                        <strong>过期预警：</strong> {{ user }} 共有 <strong>{{ expiringSoonTotal.toFixed(1) }}</strong> 天调休即将到期：
-                        <div v-for="(item, index) in expiringSoonRecords" :key="index" style="font-size: 13px; margin-top: 4px;">
-                            • <strong>{{ item.remaining.toFixed(1) }}</strong> 天调休（来自 {{ item.logDate }} 的加班）将在 <strong>{{ item.daysLeft }}</strong> 天后过期。
-                        </div>
-                    </div>
+                <div style="font-weight: bold; margin-bottom: 6px;"><i class="el-icon-warning-outline"></i> 到期预警：</div>
+                <div v-for="(item, index) in expiringSoonRecords" :key="index" class="alert-item">
+                    {{ item.remaining.toFixed(1) }} 天 ({{ item.logDate }}加班) 将在 <strong>{{ item.daysLeft }}</strong> 天后过期
                 </div>
             </div>
 
-            <el-card style="border-radius: 12px;">
-                <div slot="header" class="card-title">
-                    <span><i class="el-icon-notebook-2"></i> 调休详情(FIFO)</span>
-                    <div>
-                        <el-button type="primary" size="mini" icon="el-icon-plus" round @click="openDialog">登记</el-button>
-                        <el-button type="success" size="mini" icon="el-icon-upload2" round @click="batchDialogVisible = true">导入</el-button>
+            <el-card class="glass-card">
+                <div slot="header" class="card-header-flex">
+                    <span class="card-title"><i class="el-icon-notebook-2"></i> 加班/调休明细</span>
+                    <div class="action-btns">
+                        <el-button type="primary" size="mini" round icon="el-icon-plus" @click="openDialog">登记</el-button>
+                        <el-button type="success" size="mini" round icon="el-icon-upload2" @click="batchDialogVisible = true">导入</el-button>
                     </div>
                 </div>
                 
-                <el-table :data="processedLogs" stripe size="small" style="width: 100%" max-height="650">
-                    <el-table-column prop="logDate" label="日期" width="95"></el-table-column>
-                    <el-table-column label="状态" width="85">
+                <el-table :data="processedLogs" stripe size="small" style="width: 100%" max-height="600">
+                    <el-table-column prop="logDate" label="日期" min-width="95"></el-table-column>
+                    <el-table-column label="状态" min-width="85">
                         <template slot-scope="scope">
                             <template v-if="scope.row.amount > 0">
                                 <el-tag v-if="scope.row.status === '已过期'" size="mini" type="danger">已过期</el-tag>
                                 <el-tag v-else-if="scope.row.status === '已抵扣'" size="mini" type="success">已用完</el-tag>
-                                <el-tag v-else-if="scope.row.status === '即将过期'" size="mini" type="warning">剩{{scope.row.daysLeft}}天</el-tag>
+                                <el-tag v-else-if="scope.row.status === '即将过期'" size="mini" type="warning">{{scope.row.daysLeft}}天到期</el-tag>
                                 <el-tag v-else size="mini" type="primary">可用</el-tag>
                             </template>
-                            <el-tag v-else size="mini" type="info">调休</el-tag>
+                            <span v-else style="color: #909399; font-size: 12px;">调休抵扣</span>
                         </template>
                     </el-table-column>
-                    <el-table-column label="天数" width="55">
+                    <el-table-column label="天数" width="55" align="center">
                         <template slot-scope="scope">
-                            <span :style="{color: scope.row.amount > 0 ? '#67C23A' : '#F56C6C', fontWeight:'bold'}">
+                            <span :style="{color: scope.row.amount > 0 ? '#52c41a' : '#f5222d', fontWeight:'600'}">
                                 {{ scope.row.amount > 0 ? '+' + scope.row.amount : scope.row.amount }}
                             </span>
                         </template>
                     </el-table-column>
-                    <el-table-column prop="note" label="备注" min-width="80" show-overflow-tooltip></el-table-column>
-                    <el-table-column label="操作" width="100">
+                    <el-table-column label="操作" width="90" align="right">
                         <template slot-scope="scope">
-                            <div style="display: flex; gap: 8px;">
+                            <div class="action-btns">
                                 <el-button v-if="scope.row.amount > 0 && scope.row.status !== '已抵扣'" 
-                                    type="text" size="mini" icon="el-icon-date" 
-                                    @click="openExtendDialog(scope.row)">效期</el-button>
-                                <el-button type="text" size="mini" icon="el-icon-delete" 
-                                    style="color: #F56C6C;" 
-                                    @click="handleDelete(scope.row)"></el-button>
+                                    type="text" size="mini" class="btn-text" icon="el-icon-date" @click="openExtendDialog(scope.row)">效期</el-button>
+                                <el-button type="text" size="mini" class="btn-text" icon="el-icon-delete" style="color: #ff4d4f;" @click="handleDelete(scope.row)"></el-button>
                             </div>
                         </template>
                     </el-table-column>
@@ -110,79 +120,82 @@
             </el-card>
         </el-col>
 
-        <el-col :span="14">
-            <el-card style="border-radius: 12px; min-height: 500px;">
-                <div slot="header" class="card-title">
-                    <span><i class="el-icon-pie-chart"></i> 全员调休余额分布图</span>
+        <el-col :xs="24" :sm="24" :md="14" :lg="14">
+            <el-card class="glass-card">
+                <div slot="header" class="card-header-flex">
+                    <span class="card-title"><i class="el-icon-pie-chart"></i> 全员调休余额分布大盘</span>
                     <el-button icon="el-icon-refresh" size="mini" circle @click="fetchAllData"></el-button>
                 </div>
-                <div id="mainChart" class="chart-container"></div>
+                <div id="mainChart" class="chart-wrap"></div>
             </el-card>
         </el-col>
     </row>
 
-    <el-dialog title="🕒 精准设置过期时间" :visible.sync="extendDialogVisible" width="400px" center>
-        <el-form label-position="top">
-            <el-form-item label="该笔加班将于此日期后失效：">
-                <el-date-picker v-model="extendForm.newExpireDate" type="date" value-format="yyyy-MM-dd" style="width: 100%" placeholder="选择日期"></el-date-picker>
-            </el-form-item>
-        </el-form>
-        <div slot="footer">
-            <el-button size="small" @click="extendDialogVisible = false">取消</el-button>
-            <el-button size="small" type="primary" @click="submitExtend">保存新效期</el-button>
-        </div>
-    </el-dialog>
-
-    <el-dialog title="👥 成员名单管理" :visible.sync="memberDialogVisible" width="650px">
+    <el-dialog title="👥 成员名单管理中心" :visible.sync="memberDialogVisible" width="680px">
         <el-table :data="userListForTable" size="small" border height="400">
-            <el-table-column label="成员姓名" prop="name"></el-table-column>
-            <el-table-column label="管理操作" width="280">
+            <el-table-column label="姓名" prop="name" align="center"></el-table-column>
+            <el-table-column label="管理操作" align="center" width="280">
                 <template slot-scope="scope">
-                    <el-button size="mini" type="primary" plain icon="el-icon-refresh" @click="switchAccount(scope.row.name)">切换视图</el-button>
-                    <el-button size="mini" type="danger" icon="el-icon-delete" @click="removeMember(scope.row.name)">彻底删除</el-button>
+                    <div class="action-btns" style="justify-content: center;">
+                        <el-button size="mini" type="primary" plain icon="el-icon-refresh" @click="switchAccount(scope.row.name)">切换</el-button>
+                        <el-button size="mini" type="info" plain icon="el-icon-edit" @click="renameAnyMember(scope.row.name)">改名</el-button>
+                        <el-button size="mini" type="danger" icon="el-icon-delete" @click="removeMember(scope.row.name)">删除</el-button>
+                    </div>
                 </template>
             </el-table-column>
         </el-table>
     </el-dialog>
 
-    <el-dialog title="新增调休/加班" :visible.sync="dialogVisible" width="500px">
+    <el-dialog title="🕒 精准设置到期时间" :visible.sync="extendDialogVisible" width="400px" center>
         <el-form label-position="top">
-            <el-form-item label="目标成员">
-                <el-select v-model="form.targetUser" filterable allow-create placeholder="选人或直接输入" style="width:100%">
+            <el-form-item label="该笔加班将于此日期失效：">
+                <el-date-picker v-model="extendForm.newExpireDate" type="date" value-format="yyyy-MM-dd" style="width: 100%"></el-date-picker>
+            </el-form-item>
+        </el-form>
+        <div slot="footer">
+            <el-button size="small" @click="extendDialogVisible = false">取消</el-button>
+            <el-button size="small" type="primary" @click="submitExtend">确认保存</el-button>
+        </div>
+    </el-dialog>
+
+    <el-dialog title="加班/调休登记" :visible.sync="dialogVisible" width="500px">
+        <el-form label-position="top">
+            <el-form-item label="选择成员">
+                <el-select v-model="form.targetUser" filterable allow-create style="width:100%">
                     <el-option v-for="item in userList" :key="item" :label="item" :value="item"></el-option>
                 </el-select>
             </el-form-item>
-            <el-row :gutter="20">
+            <el-row :gutter="15">
                 <el-col :span="12">
-                    <el-form-item label="记录类型">
-                        <el-radio-group v-model="form.type">
-                            <el-radio-button label="plus">加班 (+)</el-radio-button>
-                            <el-radio-button label="minus">调休 (-)</el-radio-button>
+                    <el-form-item label="类型">
+                        <el-radio-group v-model="form.type" size="small">
+                            <el-radio-button label="plus">加班</el-radio-button>
+                            <el-radio-button label="minus">调休</el-radio-button>
                         </el-radio-group>
                     </el-form-item>
                 </el-col>
                 <el-col :span="12">
-                    <el-form-item label="变动天数">
+                    <el-form-item label="天数">
                         <el-input-number v-model="form.displayAmount" :precision="1" :step="0.5" style="width: 100%"></el-input-number>
                     </el-form-item>
                 </el-col>
             </el-row>
-            <el-form-item label="变动日期">
+            <el-form-item label="日期">
                 <el-date-picker v-model="form.logDate" type="date" value-format="yyyy-MM-dd" style="width: 100%"></el-date-picker>
             </el-form-item>
             <el-form-item label="备注">
-                <el-input v-model="form.note" placeholder="如：XX项目上线加班"></el-input>
+                <el-input v-model="form.note" placeholder="选填"></el-input>
             </el-form-item>
         </el-form>
-        <div slot="footer"><el-button type="primary" block @click="submitForm">确认并同步云端</el-button></div>
+        <div slot="footer"><el-button type="primary" @click="submitForm" block>确认登记并同步</el-button></div>
     </el-dialog>
 
     <el-dialog title="批量快速导入" :visible.sync="batchDialogVisible" width="500px">
         <el-input type="textarea" :rows="8" v-model="batchText" placeholder="姓名,日期,天数,备注 (每行一条)"></el-input>
-        <div slot="footer"><el-button type="primary" block @click="handleBatchImport">开始导入</el-button></div>
+        <div slot="footer"><el-button type="primary" block @click="handleBatchImport">开始全量导入</el-button></div>
     </el-dialog>
 
-    <div class="footer">© 2026 调休管家 · 先进先出算法 · 云端实时同步</div>
+    <div class="footer">© 2026 企业调休管理系统 · 已开启云端实时同步</div>
 </div>
 
 <script>
@@ -212,13 +225,8 @@ new Vue({
     computed: {
         processedLogs() { return this.calculateUserStats(this.user).logs; },
         myAvailableTotal() { return this.calculateUserStats(this.user).availableBalance; },
-        // 核心修复：获取即将过期的明细
-        expiringSoonRecords() { 
-            return this.processedLogs.filter(l => l.status === '即将过期');
-        },
-        expiringSoonTotal() {
-            return this.expiringSoonRecords.reduce((sum, l) => sum + (l.remaining || 0), 0);
-        },
+        expiringSoonRecords() { return this.processedLogs.filter(l => l.status === '即将过期'); },
+        expiringSoonTotal() { return this.expiringSoonRecords.reduce((sum, l) => sum + (l.remaining || 0), 0); },
         userListForTable() { return this.userList.map(name => ({ name })); },
         allUsersStats() {
             return this.userList.map(u => ({
@@ -230,10 +238,11 @@ new Vue({
     mounted() {
         if (!this.user) this.forceLogin();
         else this.fetchAllData();
-        window.addEventListener('resize', () => this.chart && this.chart.resize());
+        window.addEventListener('resize', () => {
+            if(this.chart) this.chart.resize();
+        });
     },
     methods: {
-        // --- 核心算法：带效期判定与 FIFO 抵扣 ---
         calculateUserStats(username) {
             const userLogs = this.allRawLogs.filter(l => l.get('user') === username).map(l => ({
                 id: l.id, logDate: l.get('logDate'), amount: l.get('amount'), note: l.get('note'), 
@@ -247,17 +256,14 @@ new Vue({
             plusLogs.forEach(log => {
                 let d = log.customExpireDate ? new Date(log.customExpireDate) : new Date(log.logDate);
                 if(!log.customExpireDate) d.setDate(d.getDate() + 30);
-                
                 let consumed = Math.min(log.amount, minusTotal);
                 log.remaining = log.amount - consumed;
                 minusTotal -= consumed;
-                
                 const diffDays = Math.ceil((d - today) / (1000 * 60 * 60 * 24));
                 if (log.remaining <= 0) log.status = '已抵扣';
                 else if (diffDays <= 0) { log.status = '已过期'; log.remaining = 0; }
                 else if (diffDays <= 7) log.status = '即将过期';
                 else log.status = '有效';
-                
                 log.daysLeft = diffDays;
                 availableBalance += log.remaining;
             });
@@ -277,13 +283,74 @@ new Vue({
             } finally { this.loading = false; }
         },
 
+        switchAccount(name) {
+            this.user = name;
+            localStorage.setItem('ot_user', name);
+            this.memberDialogVisible = false;
+            this.$message.success(`已切换视图至 [${name}]`);
+        },
+
+        async removeMember(target) {
+            try {
+                await this.$confirm(`此操作将永久抹除 [${target}] 在云端的所有记录且不可恢复，确认执行？`, '终极警告', { type: 'error' });
+                this.loading = true;
+                const query = new AV.Query('OTLog');
+                query.equalTo('user', target);
+                const records = await query.limit(1000).find();
+                await AV.Object.destroyAll(records);
+                this.$message.success(`${target} 的数据已清空`);
+                if (this.user === target) {
+                    this.user = this.userList.find(u => u !== target) || '';
+                    localStorage.setItem('ot_user', this.user);
+                }
+                await this.fetchAllData();
+            } catch (e) { if(e!=='cancel') console.error(e); } finally { this.loading = false; }
+        },
+
+        async renameAnyMember(oldName) {
+            const { value } = await this.$prompt('请输入新姓名', '修改姓名', { inputValue: oldName });
+            if (value && value !== oldName) {
+                this.loading = true;
+                const query = new AV.Query('OTLog');
+                query.equalTo('user', oldName);
+                const records = await query.limit(1000).find();
+                records.forEach(r => r.set('user', value.trim()));
+                await AV.Object.saveAll(records);
+                if (this.user === oldName) {
+                    this.user = value.trim();
+                    localStorage.setItem('ot_user', this.user);
+                }
+                await this.fetchAllData();
+            }
+        },
+
+        renderChart() {
+            if (!this.chart) this.chart = echarts.init(document.getElementById('mainChart'));
+            this.chart.setOption({
+                tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+                grid: { left: '3%', right: '12%', bottom: '5%', top: '5%', containLabel: true },
+                xAxis: { type: 'value', splitLine: { lineStyle: { type: 'dashed' } } },
+                yAxis: { type: 'category', data: this.allUsersStats.map(i => i.name), axisLine: { show: false }, axisTick: { show: false } },
+                series: [{
+                    name: '可用天数', type: 'bar', barMaxWidth: 25,
+                    data: this.allUsersStats.map(i => ({
+                        value: i.value,
+                        itemStyle: { 
+                            color: i.value > 0 ? new echarts.graphic.LinearGradient(0, 0, 1, 0, [{offset: 0, color: '#1890ff'}, {offset: 1, color: '#36cfc9'}]) : '#ff4d4f',
+                            borderRadius: [0, 4, 4, 0]
+                        }
+                    })),
+                    label: { show: true, position: 'right', fontWeight: 'bold' }
+                }]
+            }, true);
+        },
+
         openExtendDialog(row) {
             this.extendForm = { id: row.id, newExpireDate: row.customExpireDate };
             this.extendDialogVisible = true;
         },
 
         async submitExtend() {
-            if (!this.extendForm.newExpireDate) return this.$message.warning('请选择日期');
             const log = AV.Object.createWithoutData('OTLog', this.extendForm.id);
             log.set('customExpireDate', this.extendForm.newExpireDate);
             await log.save();
@@ -292,97 +359,37 @@ new Vue({
             await this.fetchAllData();
         },
 
-        switchAccount(name) {
-            this.user = name;
-            localStorage.setItem('ot_user', name);
-            this.memberDialogVisible = false;
-            this.$message.success(`视图已切换至：${name}`);
-        },
-
-        async removeMember(target) {
-            try {
-                await this.$confirm(`此操作将永久删除 [${target}] 在云端的所有记录，确认执行？`, '彻底删除警告', { type: 'error' });
-                this.loading = true;
-                const query = new AV.Query('OTLog');
-                query.equalTo('user', target);
-                const records = await query.limit(1000).find();
-                await AV.Object.destroyAll(records);
-                this.$message.success(`${target} 的记录已完全清除`);
-                if (this.user === target) {
-                    this.user = this.userList.find(u => u !== target) || '';
-                    localStorage.setItem('ot_user', this.user);
-                }
-                await this.fetchAllData();
-            } finally { this.loading = false; }
-        },
-
-        renderChart() {
-            if (!this.chart) this.chart = echarts.init(document.getElementById('mainChart'));
-            this.chart.setOption({
-                tooltip: { trigger: 'axis' },
-                grid: { left: '3%', right: '10%', bottom: '5%', top: '5%', containLabel: true },
-                xAxis: { type: 'value' },
-                yAxis: { type: 'category', data: this.allUsersStats.map(i => i.name) },
-                series: [{
-                    name: '可用天数', type: 'bar', barMaxWidth: 30,
-                    data: this.allUsersStats.map(i => ({
-                        value: i.value,
-                        itemStyle: { color: i.value > 0 ? '#1890ff' : '#ff4d4f' }
-                    })),
-                    label: { show: true, position: 'right' }
-                }]
-            }, true);
-        },
-
         openDialog() {
             this.form = { targetUser: this.user, type: 'plus', logDate: new Date().toISOString().split('T')[0], displayAmount: 0.5, note: '' };
             this.dialogVisible = true;
         },
 
         async submitForm() {
-            if (!this.form.targetUser) return this.$message.error('请选择成员');
             this.loading = true;
-            try {
-                const log = new OTLog();
-                log.set('user', this.form.targetUser.trim());
-                log.set('logDate', this.form.logDate);
-                log.set('amount', this.form.type === 'plus' ? this.form.displayAmount : -this.form.displayAmount);
-                log.set('note', this.form.note);
-                await log.save();
-                this.dialogVisible = false;
-                await this.fetchAllData();
-            } finally { this.loading = false; }
+            const log = new OTLog();
+            log.set('user', this.form.targetUser.trim());
+            log.set('logDate', this.form.logDate);
+            log.set('amount', this.form.type === 'plus' ? this.form.displayAmount : -this.form.displayAmount);
+            log.set('note', this.form.note);
+            await log.save();
+            this.dialogVisible = false;
+            await this.fetchAllData();
         },
 
         handleUserCommand(cmd) {
             if (cmd === 'MANAGE_MEMBERS') this.memberDialogVisible = true;
-            else if (cmd === 'RENAME') this.renameCurrent();
+            else if (cmd === 'RENAME') this.renameAnyMember(this.user);
             else if (cmd === 'LOGOUT') { localStorage.removeItem('ot_user'); location.reload(); }
         },
 
-        async renameCurrent() {
-            const { value } = await this.$prompt('请输入新姓名', '成员改名', { inputValue: this.user });
-            if (value && value !== this.user) {
-                this.loading = true;
-                const query = new AV.Query('OTLog');
-                query.equalTo('user', this.user);
-                const records = await query.limit(1000).find();
-                records.forEach(r => r.set('user', value.trim()));
-                await AV.Object.saveAll(records);
-                this.user = value.trim();
-                localStorage.setItem('ot_user', this.user);
-                await this.fetchAllData();
-            }
-        },
-
         async handleDelete(row) {
-            await this.$confirm('确定删除该记录吗？');
+            await this.$confirm('确定删除此记录？');
             await AV.Object.createWithoutData('OTLog', row.id).destroy();
             await this.fetchAllData();
         },
 
         forceLogin() {
-            this.$prompt('管理员姓名', '登录', { confirmButtonText: '确定', showCancelButton: false }).then(({ value }) => {
+            this.$prompt('请输入管理员姓名', '登录系统', { confirmButtonText: '确定', showCancelButton: false }).then(({ value }) => {
                 this.user = value.trim();
                 localStorage.setItem('ot_user', this.user);
                 this.fetchAllData();
